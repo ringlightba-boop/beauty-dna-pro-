@@ -280,6 +280,10 @@ export function getPackageById(id: string): Package | undefined {
   return ensureDb().packages.find((p) => p.id === id);
 }
 
+export function getPaymentOrderById(id: string): PaymentOrder | undefined {
+  return ensureDb().payment_orders.find((o) => o.id === id);
+}
+
 export function createPaymentOrder(
   input: Omit<PaymentOrder, "id" | "created_at" | "updated_at">
 ): PaymentOrder {
@@ -309,6 +313,31 @@ export function updatePaymentOrder(
   };
   save(db);
   return db.payment_orders[idx];
+}
+
+export function grantPackageCredits(
+  professionalId: string,
+  pkg: Package,
+  reference?: string
+) {
+  if (pkg.unlimited) {
+    updateProfile(professionalId, { plan_type: "unlimited", plan_status: "active" });
+  } else {
+    updateProfile(professionalId, { plan_type: "credits" });
+  }
+  adjustCredits(
+    professionalId,
+    pkg.unlimited ? 0 : pkg.credits,
+    "purchase",
+    reference ? `Compra do pacote ${pkg.name} (${reference})` : `Compra do pacote ${pkg.name}`
+  );
+}
+
+export function wasPaymentAlreadyProcessed(
+  professionalId: string,
+  reference: string
+): boolean {
+  return getTransactions(professionalId).some((t) => t.description.includes(reference));
 }
 
 export function getPaymentOrdersByProfessional(

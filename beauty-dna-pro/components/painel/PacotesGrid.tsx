@@ -26,14 +26,23 @@ export function PacotesGrid({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ packageId: pkg.id }),
       });
-      if (res.ok) {
-        setSuccessMsg(
-          pkg.unlimited
-            ? "Plano ilimitado ativado com sucesso!"
-            : `${pkg.credits} créditos adicionados com sucesso!`
-        );
-        router.refresh();
+      const data = await res.json();
+      if (!res.ok) {
+        setLoadingId(null);
+        return;
       }
+      if (data.checkoutUrl) {
+        // Real Mercado Pago flow: leave the app and go pay.
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      // Mock fallback flow: already approved instantly.
+      setSuccessMsg(
+        pkg.unlimited
+          ? "Plano ilimitado ativado com sucesso!"
+          : `${pkg.credits} créditos adicionados com sucesso!`
+      );
+      router.refresh();
     } finally {
       setLoadingId(null);
     }
