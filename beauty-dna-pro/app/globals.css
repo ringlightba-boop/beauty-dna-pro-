@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-ivory text-ink font-body antialiased;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display text-ink;
+  }
+  *:focus-visible {
+    outline: 2px solid #AD8A52;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-xs font-semibold tracking-[0.2em] uppercase text-brown/70;
+  }
+  .swatch-rule {
+    @apply h-[3px] w-14 rounded-full bg-swatch-strip;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-semibold text-ivory transition hover:bg-brown-deep disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-graphite/20 bg-transparent px-6 py-3 text-sm font-semibold text-ink transition hover:border-graphite/50 hover:bg-ivory-deep disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium text-brown transition hover:bg-ivory-deep;
+  }
+  .card {
+    @apply rounded-xl2 border border-graphite/10 bg-white/70 shadow-card;
+  }
+  .input-field {
+    @apply w-full rounded-xl border border-graphite/15 bg-white px-4 py-3 text-sm text-ink placeholder:text-graphite/40 transition focus:border-gold focus:ring-1 focus:ring-gold;
+  }
+  .choice-pill {
+    @apply cursor-pointer select-none rounded-full border px-4 py-2 text-sm transition;
+  }
+  .choice-pill-off {
+    @apply border-graphite/15 bg-white text-graphite/80 hover:border-gold-light;
+  }
+  .choice-pill-on {
+    @apply border-brown bg-brown text-ivory shadow-soft;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #E6CBB8;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
