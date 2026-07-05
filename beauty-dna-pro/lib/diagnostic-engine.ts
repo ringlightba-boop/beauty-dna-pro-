@@ -230,12 +230,19 @@ function computeAcabamento(m: Record<string, string>, intensidade: string): stri
 }
 
 function buildMakeAssinatura(
+  intensidade: string,
   acabamento: string,
   blush: string,
   sombra: string,
   batom: string
 ): string {
-  return `Pele ${acabamento}, olhos construídos em tons ${sombra}, blush ${blush} e boca finalizada em ${batom}.`;
+  if (intensidade === "leve") {
+    return `Pele com toque ${acabamento}, um véu leve de ${blush} nas maçãs, olhos suaves em tom ${sombra} e boca hidratada em ${batom} — leve o bastante para o dia a dia, sem parecer "sem nada".`;
+  }
+  if (intensidade === "marcante" || intensidade === "muito marcante") {
+    return `Pele com acabamento ${acabamento}, ${blush} intensificado nas maçãs, olhos construídos com mais pigmento em tom ${sombra} e boca de impacto em ${batom} — presença que não passa despercebida.`;
+  }
+  return `Pele ${acabamento} e uniforme, blush ${blush} para cor viva ao rosto, olhos com profundidade sutil em tom ${sombra} e boca definida em ${batom} — equilibrada para transitar do dia à noite.`;
 }
 
 export function buildMakeupDna(
@@ -285,7 +292,7 @@ export function buildMakeupDna(
     batons_recomendados: batons,
     sombras_recomendadas: sombras,
     cores_a_evitar: evitar,
-    make_assinatura: buildMakeAssinatura(acabamento, blush[0], sombras[0], batons[0]),
+    make_assinatura: buildMakeAssinatura(intensidade, acabamento, blush[0], sombras[0], batons[0]),
   };
 }
 
@@ -463,4 +470,51 @@ export function generateDiagnosticResult(
 
 export function wantsHair(servico: ServiceType | undefined | null): boolean {
   return servico === "penteado" || servico === "maquiagem_penteado";
+}
+
+// --- Style options for the client to choose from ---------------------------
+
+export interface StyleOption {
+  key: "leve" | "média" | "marcante";
+  nome: string;
+  descricao: string;
+  cores: string[];
+}
+
+const OPTION_LABEL: Record<StyleOption["key"], string> = {
+  leve: "Natural",
+  média: "Equilibrado",
+  marcante: "Intenso",
+};
+
+const OPTION_INTENSIDADE_INPUT: Record<StyleOption["key"], string> = {
+  leve: "Leve",
+  média: "Média",
+  marcante: "Marcante",
+};
+
+/**
+ * Generates 3 concrete style options from the same underlying color analysis
+ * (same temperature/contraste/tipo de pele — those come from her physical
+ * answers, not preference), varying only the intensity, so the client can
+ * choose by seeing real, described outcomes instead of guessing from an
+ * abstract word like "leve" or "marcante".
+ */
+export function buildStyleOptions(
+  imagemDesejada: string | undefined,
+  makeupAnswers: Record<string, string>
+): StyleOption[] {
+  return (["leve", "média", "marcante"] as StyleOption["key"][]).map((key) => {
+    const variantAnswers = {
+      ...makeupAnswers,
+      m1_intensidade: OPTION_INTENSIDADE_INPUT[key],
+    };
+    const dna = buildMakeupDna(imagemDesejada, variantAnswers);
+    return {
+      key,
+      nome: `${cap(dna.estilo_dominante)} ${OPTION_LABEL[key]}`,
+      descricao: dna.make_assinatura,
+      cores: [dna.blush_recomendado[0], dna.batons_recomendados[0], dna.sombras_recomendadas[0]],
+    };
+  });
 }

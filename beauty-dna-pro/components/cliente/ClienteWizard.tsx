@@ -6,6 +6,8 @@ import { SwatchProgress } from "@/components/ui/SwatchProgress";
 import { ChoicePill } from "@/components/ui/ChoicePill";
 import { QuestionRenderer } from "@/components/cliente/QuestionRenderer";
 import { PhotoUploadField } from "@/components/cliente/PhotoUploadField";
+import { StyleOptionPicker } from "@/components/cliente/StyleOptionPicker";
+import { buildStyleOptions, type StyleOption } from "@/lib/diagnostic-engine";
 import {
   servicoOpcoes,
   ocasiaoOpcoes,
@@ -33,7 +35,8 @@ type FlowStep =
   | (FlowStepBase & { kind: "imagem" })
   | (FlowStepBase & { kind: "fotos" })
   | (FlowStepBase & { kind: "makeup"; questionIndex: number })
-  | (FlowStepBase & { kind: "hair"; questionIndex: number });
+  | (FlowStepBase & { kind: "hair"; questionIndex: number })
+  | (FlowStepBase & { kind: "estilo" });
 
 function buildSteps(includeHair: boolean): FlowStep[] {
   const steps: FlowStep[] = [
@@ -51,6 +54,7 @@ function buildSteps(includeHair: boolean): FlowStep[] {
       steps.push({ key: `hair-${i}`, kind: "hair", questionIndex: i })
     );
   }
+  steps.push({ key: "estilo", kind: "estilo" });
   return steps;
 }
 
@@ -104,12 +108,18 @@ export function ClienteWizard({
   });
   const [makeupAnswers, setMakeupAnswers] = useState<Record<string, string>>({});
   const [hairAnswers, setHairAnswers] = useState<Record<string, string>>({});
+  const [selectedStyle, setSelectedStyle] = useState<StyleOption["key"] | null>(null);
   const [startingClient, setStartingClient] = useState(false);
 
   const includeHair = servico === "penteado" || servico === "maquiagem_penteado";
   const steps = useMemo(() => buildSteps(includeHair), [includeHair]);
   const step = steps[stepIndex];
   const progressPercent = (stepIndex / (steps.length - 1)) * 100;
+
+  const styleOptions = useMemo(
+    () => buildStyleOptions(imagemDesejada, makeupAnswers),
+    [imagemDesejada, makeupAnswers]
+  );
 
   function canAdvance(): boolean {
     if (!step) return false;
@@ -128,6 +138,8 @@ export function ClienteWizard({
         return true; // last field (m20) is open text/optional; others are gently required via UI nudge
       case "hair":
         return true;
+      case "estilo":
+        return !!selectedStyle;
       default:
         return true;
     }
@@ -178,6 +190,14 @@ export function ClienteWizard({
   async function handleFinalize() {
     if (!diagnosticId) return;
     setPhase("finalizando");
+    const intensityByKey: Record<StyleOption["key"], string> = {
+      leve: "Leve",
+      média: "Média",
+      marcante: "Marcante",
+    };
+    const finalMakeupAnswers = selectedStyle
+      ? { ...makeupAnswers, m1_intensidade: intensityByKey[selectedStyle] }
+      : makeupAnswers;
     try {
       const res = await fetch(`/api/diagnostics/${diagnosticId}/complete`, {
         method: "POST",
@@ -187,7 +207,7 @@ export function ClienteWizard({
           ocasiao,
           imagem_desejada: imagemDesejada,
           photos,
-          makeupAnswers,
+          makeupAnswers: finalMakeupAnswers,
           hairAnswers,
         }),
       });
@@ -270,6 +290,7 @@ export function ClienteWizard({
   // CONCLUÍDO
   // ---------------------------------------------------------------------
   if (phase === "concluido") {
+    const chosen = styleOptions.find((o) => o.key === selectedStyle);
     return (
       <CenteredShell>
         <div className="py-6 text-center">
@@ -279,6 +300,11 @@ export function ClienteWizard({
             Suas respostas foram enviadas para sua profissional. Ela usará
             seu Beauty DNA para preparar um atendimento mais personalizado.
           </p>
+          {chosen && (
+            <div className="card mt-6 p-4 text-sm text-brown-deep">
+              Você escolheu: <span className="font-semibold">{chosen.nome}</span>
+            </div>
+          )}
         </div>
       </CenteredShell>
     );
@@ -415,6 +441,14 @@ export function ClienteWizard({
             }
           />
         )}
+
+        {step.kind === "estilo" && (
+          <StyleOptionPicker
+            options={styleOptions}
+            value={selectedStyle}
+            onChange={setSelectedStyle}
+          />
+        )}
       </div>
 
       <div className="mt-8 flex items-center justify-between">
@@ -456,6 +490,8 @@ function stepLabel(step: FlowStep): string {
       return `Makeup DNA · pergunta ${step.questionIndex + 1} de ${makeupDnaPerguntas.length}`;
     case "hair":
       return `Hair DNA · pergunta ${step.questionIndex + 1} de ${hairDnaPerguntas.length}`;
+    case "estilo":
+      return "Seu Look DNA";
   }
 }
 
