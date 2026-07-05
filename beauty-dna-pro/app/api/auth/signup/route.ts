@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (getProfileByEmail(email)) {
+  if (await getProfileByEmail(email)) {
     return NextResponse.json(
       { error: "Já existe uma conta com este e-mail." },
       { status: 409 }
@@ -40,14 +40,14 @@ export async function POST(req: NextRequest) {
   let baseSlug = slugify(professional_name) || slugify(full_name) || "maquiadora";
   let slug = baseSlug;
   let attempt = 1;
-  while (slugExists(slug)) {
+  while (await slugExists(slug)) {
     attempt += 1;
     slug = `${baseSlug}${attempt}`;
   }
 
   const password_hash = await hashPassword(password);
 
-  const profile = createProfile({
+  const profile = await createProfile({
     full_name,
     professional_name,
     email,

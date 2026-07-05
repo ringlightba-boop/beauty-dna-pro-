@@ -1,27 +1,26 @@
 -- ---------------------------------------------------------------------------
 -- Beauty DNA Pro AI — Supabase schema
 -- ---------------------------------------------------------------------------
--- This mirrors the tables the MVP's mock data layer (lib/db.ts) already uses
--- in memory/JSON. When you're ready to go live:
---   1. Run this file against a new Supabase project.
---   2. Reimplement the functions in lib/db.ts using `@supabase/supabase-js`
---      (or `@supabase/ssr` for server components) — the function signatures
---      can stay the same, so no page/component needs to change.
---   3. Move photo uploads from base64 data URLs to Supabase Storage buckets
---      (see the `diagnostic-photos` bucket note at the bottom).
---   4. Swap lib/auth.ts's cookie session for Supabase Auth
---      (supabase.auth.signUp / signInWithPassword), keeping `profiles.user_id`
---      as the foreign key to `auth.users.id`.
+-- The app connects to this database using the SERVICE ROLE key from
+-- lib/supabase/admin.ts, server-side only. Authentication is the app's own
+-- cookie-based session (lib/auth.ts, bcrypt password hashes stored in
+-- profiles.password_hash) rather than Supabase Auth — so `profiles.user_id`
+-- is not a foreign key into auth.users, and the RLS policies below are kept
+-- as future-hardening (in case a client-side anon-key integration is added
+-- later) rather than the active enforcement layer. Access control today is
+-- enforced in application code: every query in lib/db.ts is scoped by
+-- professional_id from the current session.
 -- ---------------------------------------------------------------------------
 
 create extension if not exists "uuid-ossp";
 
 create table if not exists profiles (
   id uuid primary key default uuid_generate_v4(),
-  user_id uuid not null references auth.users (id) on delete cascade,
+  user_id uuid not null,
   full_name text not null,
   professional_name text not null,
   email text not null unique,
+  password_hash text not null,
   whatsapp text not null,
   city text not null,
   state text not null,
@@ -87,10 +86,12 @@ create table if not exists credit_transactions (
 
 create table if not exists packages (
   id uuid primary key default uuid_generate_v4(),
-  name text not null,
+  name text not null unique,
   credits integer not null,
   price numeric(10,2) not null,
   active boolean not null default true,
+  unlimited boolean not null default false,
+  period text,
   created_at timestamptz not null default now()
 );
 
@@ -146,11 +147,12 @@ create policy "Anyone can read active packages"
   on packages for select
   using (active = true);
 
-insert into packages (name, credits, price, active) values
-  ('Essencial', 10, 29.90, true),
-  ('Profissional', 30, 59.90, true),
-  ('Studio', 100, 127.00, true)
-on conflict do nothing;
+insert into packages (name, credits, price, active, unlimited, period) values
+  ('Essencial', 10, 29.90, true, false, null),
+  ('Profissional', 30, 59.90, true, false, null),
+  ('Studio', 100, 127.00, true, false, null),
+  ('Ilimitado mensal', 999999, 97.00, true, true, 'mensal')
+on conflict (name) do nothing;
 
 -- Storage bucket for client photos (run once):
 -- select storage.create_bucket('diagnostic-photos', public := false);

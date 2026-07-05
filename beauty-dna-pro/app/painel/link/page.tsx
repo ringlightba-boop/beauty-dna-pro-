@@ -2,8 +2,8 @@ import { getCurrentProfile } from "@/lib/auth";
 import { LinkShareCard } from "@/components/painel/LinkShareCard";
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export default function MeuLinkPage() {
-  const profile = getCurrentProfile()!;
+export default async function MeuLinkPage() {
+  const profile = (await getCurrentProfile())!;
 
   return (
     <div className="max-w-3xl">

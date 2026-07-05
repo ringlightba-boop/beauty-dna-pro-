@@ -6,19 +6,19 @@ import { DiagnosticoEditor } from "@/components/painel/DiagnosticoEditor";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { clientLinkPath } from "@/lib/utils";
 
-export default function DiagnosticoDetailPage({
+export default async function DiagnosticoDetailPage({
   params,
 }: {
   params: { id: string };
 }) {
-  const profile = getCurrentProfile()!;
-  const diagnostic = getDiagnosticById(params.id);
+  const profile = (await getCurrentProfile())!;
+  const diagnostic = await getDiagnosticById(params.id);
 
   if (!diagnostic || diagnostic.professional_id !== profile.id) {
     notFound();
   }
 
-  const client = getClientById(diagnostic!.client_id);
+  const client = await getClientById(diagnostic!.client_id);
 
   if (diagnostic!.status === "aguardando_cliente") {
     const link = `${getBaseUrl()}${clientLinkPath(profile.slug)}`;

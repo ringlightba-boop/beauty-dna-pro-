@@ -3,8 +3,8 @@ import { getCurrentProfile } from "@/lib/auth";
 import { LinkShareCard } from "@/components/painel/LinkShareCard";
 import { getBaseUrl } from "@/lib/get-base-url";
 
-export default function NovoDiagnosticoPage() {
-  const profile = getCurrentProfile()!;
+export default async function NovoDiagnosticoPage() {
+  const profile = (await getCurrentProfile())!;
   const isUnlimited = profile.plan_type === "unlimited";
 
   if (!isUnlimited && profile.credits_available <= 0) {

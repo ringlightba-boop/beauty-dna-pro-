@@ -7,12 +7,12 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const profile = getCurrentProfile();
+  const profile = await getCurrentProfile();
   if (!profile) {
     return NextResponse.json({ error: "Não autenticada." }, { status: 401 });
   }
 
-  const diagnostic = getDiagnosticById(params.id);
+  const diagnostic = await getDiagnosticById(params.id);
   if (!diagnostic || diagnostic.professional_id !== profile.id) {
     return NextResponse.json(
       { error: "Diagnóstico não encontrado." },
@@ -25,7 +25,7 @@ export async function PATCH(
     whatsapp_summary?: string;
   };
 
-  const updated = updateDiagnostic(diagnostic.id, {
+  const updated = await updateDiagnostic(diagnostic.id, {
     edited_result_json: body.edited_result_json,
     whatsapp_summary:
       body.whatsapp_summary ?? body.edited_result_json.look_dna.resumo_whatsapp,

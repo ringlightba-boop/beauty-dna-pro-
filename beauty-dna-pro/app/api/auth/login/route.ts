@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const profile = getProfileByEmail(email);
+  const profile = await getProfileByEmail(email);
   if (!profile) {
     return NextResponse.json(
       { error: "E-mail ou senha inválidos." },

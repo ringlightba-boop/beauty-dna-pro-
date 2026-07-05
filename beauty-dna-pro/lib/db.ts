@@ -1,6 +1,5 @@
-import fs from "fs";
-import path from "path";
 import { v4 as uuid } from "uuid";
+import { getSupabaseAdmin } from "./supabase/admin";
 import type {
   Profile,
   Client,
@@ -11,99 +10,28 @@ import type {
 } from "./types";
 
 // ---------------------------------------------------------------------------
-// MOCK DATA LAYER
+// SUPABASE-BACKED DATA LAYER
 // ---------------------------------------------------------------------------
-// This module is the single point of contact with "the database" for the
-// entire app. Every page/API route imports from here, never from a JSON file
-// directly. That means swapping this file's internals for real Supabase
-// calls (see supabase/schema.sql for the matching table definitions) later
-// will not require touching any page component.
+// Same function surface as the original mock (file-based) implementation —
+// every page/API route still imports from here and nothing else needed to
+// change except adding `await` at each call site, since these are now
+// asynchronous network calls instead of synchronous file reads.
 // ---------------------------------------------------------------------------
 
-interface DbShape {
-  profiles: Profile[];
-  clients: Client[];
-  diagnostics: Diagnostic[];
-  credit_transactions: CreditTransaction[];
-  packages: Package[];
-  payment_orders: PaymentOrder[];
-}
-
-const DATA_DIR = path.join(process.cwd(), ".data");
-const DB_FILE = path.join(DATA_DIR, "db.json");
-
-const DEFAULT_PACKAGES: Package[] = [
-  {
-    id: "pkg-essencial",
-    name: "Essencial",
-    credits: 10,
-    price: 29.9,
-    active: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "pkg-profissional",
-    name: "Profissional",
-    credits: 30,
-    price: 59.9,
-    active: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "pkg-studio",
-    name: "Studio",
-    credits: 100,
-    price: 127.0,
-    active: true,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: "pkg-ilimitado",
-    name: "Ilimitado mensal",
-    credits: 999999,
-    price: 97.0,
-    active: true,
-    unlimited: true,
-    period: "mensal",
-    created_at: new Date().toISOString(),
-  },
-];
-
-function ensureDb(): DbShape {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(DB_FILE)) {
-    const initial: DbShape = {
-      profiles: [],
-      clients: [],
-      diagnostics: [],
-      credit_transactions: [],
-      packages: DEFAULT_PACKAGES,
-      payment_orders: [],
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2));
-    return initial;
-  }
-  const raw = fs.readFileSync(DB_FILE, "utf-8");
-  const parsed = JSON.parse(raw) as DbShape;
-  if (!parsed.packages || parsed.packages.length === 0) {
-    parsed.packages = DEFAULT_PACKAGES;
-  }
-  return parsed;
-}
-
-function save(db: DbShape) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-}
-
-function now() {
+function now(): string {
   return new Date().toISOString();
+}
+
+function unwrap<T>(data: T | null, error: { message: string } | null, context: string): T {
+  if (error) {
+    throw new Error(`Supabase error (${context}): ${error.message}`);
+  }
+  return data as T;
 }
 
 // --- Profiles ---------------------------------------------------------
 
-export function createProfile(
+export async function createProfile(
   input: Omit<
     Profile,
     | "id"
@@ -117,9 +45,11 @@ export function createProfile(
     | "default_message"
     | "slug"
   > & { slug: string }
-): Profile {
-  const db = ensureDb();
+): Promise<Profile> {
+  const db = getSupabaseAdmin();
   const id = uuid();
+  const timestamp = now();
+
   const profile: Profile = {
     ...input,
     id,
@@ -130,65 +60,89 @@ export function createProfile(
     free_credits_used: 0,
     plan_type: "free",
     plan_status: "active",
-    created_at: now(),
-    updated_at: now(),
+    created_at: timestamp,
+    updated_at: timestamp,
   };
-  db.profiles.push(profile);
-  db.credit_transactions.push({
+
+  const { data, error } = await db.from("profiles").insert(profile).select().single();
+  unwrap(data, error, "createProfile");
+
+  const { error: txError } = await db.from("credit_transactions").insert({
     id: uuid(),
     professional_id: id,
     transaction_type: "grant_free",
     amount: 3,
     description: "3 diagnósticos grátis de boas-vindas",
-    created_at: now(),
+    created_at: timestamp,
   });
-  save(db);
+  if (txError) throw new Error(`Supabase error (createProfile tx): ${txError.message}`);
+
   return profile;
 }
 
-export function getProfileById(id: string): Profile | undefined {
-  return ensureDb().profiles.find((p) => p.id === id);
+export async function getProfileById(id: string): Promise<Profile | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("profiles").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`Supabase error (getProfileById): ${error.message}`);
+  return (data as Profile) ?? undefined;
 }
 
-export function getProfileByEmail(email: string): Profile | undefined {
-  return ensureDb().profiles.find(
-    (p) => p.email.toLowerCase() === email.toLowerCase()
-  );
+export async function getProfileByEmail(email: string): Promise<Profile | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("profiles").select("*").ilike("email", email).maybeSingle();
+  if (error) throw new Error(`Supabase error (getProfileByEmail): ${error.message}`);
+  return (data as Profile) ?? undefined;
 }
 
-export function getProfileBySlug(slug: string): Profile | undefined {
-  return ensureDb().profiles.find((p) => p.slug === slug);
+export async function getProfileBySlug(slug: string): Promise<Profile | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("profiles").select("*").eq("slug", slug).maybeSingle();
+  if (error) throw new Error(`Supabase error (getProfileBySlug): ${error.message}`);
+  return (data as Profile) ?? undefined;
 }
 
-export function slugExists(slug: string): boolean {
-  return ensureDb().profiles.some((p) => p.slug === slug);
+export async function slugExists(slug: string): Promise<boolean> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("profiles").select("id").eq("slug", slug).maybeSingle();
+  if (error) throw new Error(`Supabase error (slugExists): ${error.message}`);
+  return !!data;
 }
 
-export function updateProfile(
+export async function updateProfile(
   id: string,
   patch: Partial<Profile>
-): Profile | undefined {
-  const db = ensureDb();
-  const idx = db.profiles.findIndex((p) => p.id === id);
-  if (idx === -1) return undefined;
-  db.profiles[idx] = { ...db.profiles[idx], ...patch, updated_at: now() };
-  save(db);
-  return db.profiles[idx];
+): Promise<Profile | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("profiles")
+    .update({ ...patch, updated_at: now() })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(`Supabase error (updateProfile): ${error.message}`);
+  return (data as Profile) ?? undefined;
 }
 
-export function adjustCredits(
+export async function adjustCredits(
   professionalId: string,
   amount: number,
   type: CreditTransaction["transaction_type"],
   description: string,
   diagnosticId?: string
-): Profile | undefined {
-  const db = ensureDb();
-  const idx = db.profiles.findIndex((p) => p.id === professionalId);
-  if (idx === -1) return undefined;
-  db.profiles[idx].credits_available += amount;
-  db.profiles[idx].updated_at = now();
-  db.credit_transactions.push({
+): Promise<Profile | undefined> {
+  const db = getSupabaseAdmin();
+  const profile = await getProfileById(professionalId);
+  if (!profile) return undefined;
+
+  const { data, error } = await db
+    .from("profiles")
+    .update({ credits_available: profile.credits_available + amount, updated_at: now() })
+    .eq("id", professionalId)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(`Supabase error (adjustCredits): ${error.message}`);
+
+  const { error: txError } = await db.from("credit_transactions").insert({
     id: uuid(),
     professional_id: professionalId,
     transaction_type: type,
@@ -197,135 +151,164 @@ export function adjustCredits(
     diagnostic_id: diagnosticId ?? null,
     created_at: now(),
   });
-  save(db);
-  return db.profiles[idx];
+  if (txError) throw new Error(`Supabase error (adjustCredits tx): ${txError.message}`);
+
+  return (data as Profile) ?? undefined;
 }
 
-export function getTransactions(professionalId: string): CreditTransaction[] {
-  return ensureDb()
-    .credit_transactions.filter((t) => t.professional_id === professionalId)
-    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+export async function getTransactions(professionalId: string): Promise<CreditTransaction[]> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("credit_transactions")
+    .select("*")
+    .eq("professional_id", professionalId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Supabase error (getTransactions): ${error.message}`);
+  return (data as CreditTransaction[]) ?? [];
 }
 
 // --- Clients ------------------------------------------------------------
 
-export function createClient(
-  input: Omit<Client, "id" | "created_at">
-): Client {
-  const db = ensureDb();
+export async function createClient(input: Omit<Client, "id" | "created_at">): Promise<Client> {
+  const db = getSupabaseAdmin();
   const client: Client = { ...input, id: uuid(), created_at: now() };
-  db.clients.push(client);
-  save(db);
-  return client;
+  const { data, error } = await db.from("clients").insert(client).select().single();
+  return unwrap(data as Client, error, "createClient");
 }
 
-export function getClientsByProfessional(professionalId: string): Client[] {
-  return ensureDb()
-    .clients.filter((c) => c.professional_id === professionalId)
-    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+export async function getClientsByProfessional(professionalId: string): Promise<Client[]> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("clients")
+    .select("*")
+    .eq("professional_id", professionalId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Supabase error (getClientsByProfessional): ${error.message}`);
+  return (data as Client[]) ?? [];
 }
 
-export function getClientById(id: string): Client | undefined {
-  return ensureDb().clients.find((c) => c.id === id);
+export async function getClientById(id: string): Promise<Client | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("clients").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`Supabase error (getClientById): ${error.message}`);
+  return (data as Client) ?? undefined;
 }
 
 // --- Diagnostics ----------------------------------------------------------
 
-export function createDiagnostic(
+export async function createDiagnostic(
   input: Omit<Diagnostic, "id" | "created_at" | "updated_at">
-): Diagnostic {
-  const db = ensureDb();
-  const diagnostic: Diagnostic = {
-    ...input,
-    id: uuid(),
-    created_at: now(),
-    updated_at: now(),
-  };
-  db.diagnostics.push(diagnostic);
-  save(db);
-  return diagnostic;
+): Promise<Diagnostic> {
+  const db = getSupabaseAdmin();
+  const timestamp = now();
+  const diagnostic: Diagnostic = { ...input, id: uuid(), created_at: timestamp, updated_at: timestamp };
+  const { data, error } = await db.from("diagnostics").insert(diagnostic).select().single();
+  return unwrap(data as Diagnostic, error, "createDiagnostic");
 }
 
-export function getDiagnosticById(id: string): Diagnostic | undefined {
-  return ensureDb().diagnostics.find((d) => d.id === id);
+export async function getDiagnosticById(id: string): Promise<Diagnostic | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("diagnostics").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`Supabase error (getDiagnosticById): ${error.message}`);
+  return (data as Diagnostic) ?? undefined;
 }
 
-export function getDiagnosticsByProfessional(
-  professionalId: string
-): Diagnostic[] {
-  return ensureDb()
-    .diagnostics.filter((d) => d.professional_id === professionalId)
-    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+export async function getDiagnosticsByProfessional(professionalId: string): Promise<Diagnostic[]> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("diagnostics")
+    .select("*")
+    .eq("professional_id", professionalId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Supabase error (getDiagnosticsByProfessional): ${error.message}`);
+  return (data as Diagnostic[]) ?? [];
 }
 
-export function updateDiagnostic(
+export async function updateDiagnostic(
   id: string,
   patch: Partial<Diagnostic>
-): Diagnostic | undefined {
-  const db = ensureDb();
-  const idx = db.diagnostics.findIndex((d) => d.id === id);
-  if (idx === -1) return undefined;
-  db.diagnostics[idx] = { ...db.diagnostics[idx], ...patch, updated_at: now() };
-  save(db);
-  return db.diagnostics[idx];
+): Promise<Diagnostic | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("diagnostics")
+    .update({ ...patch, updated_at: now() })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(`Supabase error (updateDiagnostic): ${error.message}`);
+  return (data as Diagnostic) ?? undefined;
 }
 
 // --- Packages & payments ----------------------------------------------
 
-export function getPackages(): Package[] {
-  return ensureDb().packages.filter((p) => p.active);
+export async function getPackages(): Promise<Package[]> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("packages").select("*").eq("active", true);
+  if (error) throw new Error(`Supabase error (getPackages): ${error.message}`);
+  return (data as Package[]) ?? [];
 }
 
-export function getPackageById(id: string): Package | undefined {
-  return ensureDb().packages.find((p) => p.id === id);
+export async function getPackageById(id: string): Promise<Package | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("packages").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`Supabase error (getPackageById): ${error.message}`);
+  return (data as Package) ?? undefined;
 }
 
-export function getPaymentOrderById(id: string): PaymentOrder | undefined {
-  return ensureDb().payment_orders.find((o) => o.id === id);
+export async function getPaymentOrderById(id: string): Promise<PaymentOrder | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db.from("payment_orders").select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(`Supabase error (getPaymentOrderById): ${error.message}`);
+  return (data as PaymentOrder) ?? undefined;
 }
 
-export function createPaymentOrder(
+export async function createPaymentOrder(
   input: Omit<PaymentOrder, "id" | "created_at" | "updated_at">
-): PaymentOrder {
-  const db = ensureDb();
-  const order: PaymentOrder = {
-    ...input,
-    id: uuid(),
-    created_at: now(),
-    updated_at: now(),
-  };
-  db.payment_orders.push(order);
-  save(db);
-  return order;
+): Promise<PaymentOrder> {
+  const db = getSupabaseAdmin();
+  const timestamp = now();
+  const order: PaymentOrder = { ...input, id: uuid(), created_at: timestamp, updated_at: timestamp };
+  const { data, error } = await db.from("payment_orders").insert(order).select().single();
+  return unwrap(data as PaymentOrder, error, "createPaymentOrder");
 }
 
-export function updatePaymentOrder(
+export async function updatePaymentOrder(
   id: string,
   patch: Partial<PaymentOrder>
-): PaymentOrder | undefined {
-  const db = ensureDb();
-  const idx = db.payment_orders.findIndex((o) => o.id === id);
-  if (idx === -1) return undefined;
-  db.payment_orders[idx] = {
-    ...db.payment_orders[idx],
-    ...patch,
-    updated_at: now(),
-  };
-  save(db);
-  return db.payment_orders[idx];
+): Promise<PaymentOrder | undefined> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("payment_orders")
+    .update({ ...patch, updated_at: now() })
+    .eq("id", id)
+    .select()
+    .maybeSingle();
+  if (error) throw new Error(`Supabase error (updatePaymentOrder): ${error.message}`);
+  return (data as PaymentOrder) ?? undefined;
 }
 
-export function grantPackageCredits(
+export async function getPaymentOrdersByProfessional(professionalId: string): Promise<PaymentOrder[]> {
+  const db = getSupabaseAdmin();
+  const { data, error } = await db
+    .from("payment_orders")
+    .select("*")
+    .eq("professional_id", professionalId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(`Supabase error (getPaymentOrdersByProfessional): ${error.message}`);
+  return (data as PaymentOrder[]) ?? [];
+}
+
+export async function grantPackageCredits(
   professionalId: string,
   pkg: Package,
   reference?: string
-) {
+): Promise<void> {
   if (pkg.unlimited) {
-    updateProfile(professionalId, { plan_type: "unlimited", plan_status: "active" });
+    await updateProfile(professionalId, { plan_type: "unlimited", plan_status: "active" });
   } else {
-    updateProfile(professionalId, { plan_type: "credits" });
+    await updateProfile(professionalId, { plan_type: "credits" });
   }
-  adjustCredits(
+  await adjustCredits(
     professionalId,
     pkg.unlimited ? 0 : pkg.credits,
     "purchase",
@@ -333,17 +316,10 @@ export function grantPackageCredits(
   );
 }
 
-export function wasPaymentAlreadyProcessed(
+export async function wasPaymentAlreadyProcessed(
   professionalId: string,
   reference: string
-): boolean {
-  return getTransactions(professionalId).some((t) => t.description.includes(reference));
-}
-
-export function getPaymentOrdersByProfessional(
-  professionalId: string
-): PaymentOrder[] {
-  return ensureDb()
-    .payment_orders.filter((o) => o.professional_id === professionalId)
-    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+): Promise<boolean> {
+  const transactions = await getTransactions(professionalId);
+  return transactions.some((t) => t.description.includes(reference));
 }

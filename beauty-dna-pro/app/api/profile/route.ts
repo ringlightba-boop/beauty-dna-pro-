@@ -14,7 +14,7 @@ const ALLOWED_FIELDS = [
 ] as const;
 
 export async function PATCH(req: NextRequest) {
-  const profile = getCurrentProfile();
+  const profile = await getCurrentProfile();
   if (!profile) {
     return NextResponse.json({ error: "Não autenticada." }, { status: 401 });
   }
@@ -25,6 +25,6 @@ export async function PATCH(req: NextRequest) {
     if (typeof body[field] === "string") patch[field] = body[field];
   }
 
-  const updated = updateProfile(profile.id, patch);
+  const updated = await updateProfile(profile.id, patch);
   return NextResponse.json({ ok: true, profile: updated });
 }

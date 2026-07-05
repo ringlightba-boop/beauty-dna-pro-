@@ -1,8 +1,8 @@
 import { getCurrentProfile } from "@/lib/auth";
 import { ConfiguracoesForm } from "@/components/painel/ConfiguracoesForm";
 
-export default function ConfiguracoesPage() {
-  const profile = getCurrentProfile()!;
+export default async function ConfiguracoesPage() {
+  const profile = (await getCurrentProfile())!;
   return (
     <div className="max-w-2xl">
       <p className="eyebrow">Configurações</p>

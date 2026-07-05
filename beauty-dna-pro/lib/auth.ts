@@ -34,8 +34,9 @@ export function getSessionProfileId(): string | null {
   return cookies().get(SESSION_COOKIE)?.value ?? null;
 }
 
-export function getCurrentProfile(): Profile | null {
+export async function getCurrentProfile(): Promise<Profile | null> {
   const id = getSessionProfileId();
   if (!id) return null;
-  return getProfileById(id) ?? null;
+  const profile = await getProfileById(id);
+  return profile ?? null;
 }

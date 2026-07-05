@@ -3,25 +3,35 @@
 Plataforma SaaS para maquiadoras enviarem um diagnóstico inteligente (Look DNA
 Report) para suas clientes antes do atendimento.
 
-Stack: **Next.js 14 (App Router) · TypeScript · Tailwind CSS**. Rodando hoje
-sobre uma **camada de dados mock** (arquivo JSON local), com o schema SQL e os
-pontos de integração já preparados para **Supabase** (auth, banco, storage) e
-para o **Mercado Pago Checkout Pro**.
+Stack: **Next.js 14 (App Router) · TypeScript · Tailwind CSS · Supabase
+(Postgres)**. O pagamento por créditos já suporta o **Mercado Pago Checkout
+Pro** (opcional — sem credenciais configuradas, cai automaticamente em modo
+simulado).
 
 ---
 
 ## 1. Como rodar
+
+Este projeto **precisa de um projeto Supabase** para funcionar (é onde os
+dados — contas, clientes, diagnósticos, créditos — ficam guardados de forma
+permanente). Sem isso configurado, o site sobe mas as páginas que dependem de
+dados mostram erro.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Acesse `http://localhost:3000`. Não é necessário configurar nenhuma variável
-de ambiente para rodar o MVP — os dados ficam em `.data/db.json`, criado
-automaticamente na primeira execução (apagar esse arquivo reseta o banco).
+Variáveis de ambiente obrigatórias (veja `.env.example`):
 
-Fluxo rápido para testar:
+```
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+Passo a passo para obtê-las e configurar o banco está na seção 6.
+
+Fluxo rápido para testar (depois do Supabase configurado):
 
 1. Crie uma conta em `/cadastro` → você ganha 3 créditos e um link tipo
    `/d/seu-nome`.
@@ -56,22 +66,31 @@ components/
 
 lib/
   types.ts               → tipos que espelham as tabelas do banco
-  db.ts                  → camada de dados (hoje: JSON local em .data/db.json)
-  auth.ts                → sessão via cookie (hoje: mock; trocar por Supabase Auth)
+  db.ts                  → camada de dados, hoje 100% Supabase (Postgres)
+  supabase/admin.ts      → cliente Supabase server-only (chave service_role)
+  auth.ts                → sessão via cookie + senha com hash (bcrypt) — auth própria, não usa Supabase Auth
+  mercadopago.ts         → integração real com Checkout Pro (com fallback simulado se não configurado)
   diagnostic-engine.ts   → motor de regras que gera Makeup/Hair/Look DNA
   questions.ts           → conteúdo completo dos questionários
   pdf.ts                 → geração do PDF (jsPDF, roda no navegador)
   utils.ts, get-base-url.ts
 
-supabase/schema.sql      → schema real (tabelas + RLS) para quando for migrar
+supabase/schema.sql      → schema real (tabelas + RLS) — rode isso no seu projeto Supabase
 ```
 
-### Por que uma camada de dados mock?
+### Por que uma camada de dados separada?
 
-Todo acesso a dados passa por `lib/db.ts` — nenhuma página ou componente lê
-o arquivo JSON diretamente. Isso significa que migrar para Supabase é
-reimplementar as funções desse arquivo (mesma assinatura) usando
-`@supabase/supabase-js`, sem tocar em nenhuma tela.
+Todo acesso a dados passa por `lib/db.ts` — nenhuma página ou componente
+consulta o Supabase diretamente. Isso deixa a lógica de acesso centralizada
+num único lugar, mais fácil de auditar e trocar no futuro (por exemplo, se um
+dia fizer sentido separar leitura/escrita, adicionar cache, etc.).
+
+A autenticação é própria (cookie de sessão + `bcryptjs`), não Supabase Auth —
+o acesso ao Postgres é feito via chave **service_role** (acesso total,
+usada só no servidor) porque quem já decide "isso pertence a esta
+profissional" é o código em `lib/db.ts`/`lib/auth.ts`, filtrando sempre por
+`professional_id`. As políticas de RLS no schema ficam como reforço futuro,
+caso um dia o app passe a acessar o Supabase também direto do navegador.
 
 ### Motor de diagnóstico (sem IA real)
 
@@ -84,17 +103,14 @@ profissional, exatamente como pedido no briefing. Toda a linguagem usa
 "tendência", "provável" e "direção indicada" para evitar prometer um tom exato
 de base ou fazer qualquer leitura clínica/de personalidade.
 
-## 3. O que está mockado (e como evolui)
+## 3. O que ainda é simplificado
 
-| Área | Hoje (MVP) | Produção |
-|---|---|---|
-| Banco de dados | `.data/db.json` via `lib/db.ts` | Supabase Postgres — schema pronto em `supabase/schema.sql` (com RLS por `professional_id`) |
-| Autenticação | Cookie de sessão + senha com hash (`bcryptjs`) | Supabase Auth (`auth.users`, mantendo `profiles.user_id` como FK) |
-| Fotos | Salvas como data URL dentro do próprio registro do diagnóstico | Supabase Storage (bucket privado `diagnostic-photos`, comentado no schema) |
-| Pagamento | `POST /api/packages/purchase` simula aprovação instantânea e já credita | Mercado Pago Checkout Pro: `payment_orders` já tem `provider`, `status`, `checkout_url` prontos para um webhook trocar `status` de `pending` para `approved` |
-
-`lib/supabase/client.ts` e `lib/supabase/server.ts` já têm o boilerplate
-comentado para quando for plugar o Supabase de verdade.
+| Área | Estado atual |
+|---|---|
+| Banco de dados | **Supabase Postgres, real e permanente.** Schema em `supabase/schema.sql`. |
+| Autenticação | Cookie de sessão própria + senha com hash (`bcryptjs`), guardada em `profiles.password_hash` no Supabase. |
+| Fotos | Ainda salvas como data URL dentro do próprio registro do diagnóstico (não em Supabase Storage). Funciona, mas deixa as linhas da tabela `diagnostics` mais pesadas do que precisam. Fica como próxima melhoria natural. |
+| Pagamento | **Mercado Pago Checkout Pro real**, se `MERCADOPAGO_ACCESS_TOKEN` estiver configurado. Sem essa variável, cai automaticamente no modo simulado (aprova na hora) — útil para testar o resto do app sem depender do Mercado Pago. |
 
 ## 4. Sistema de créditos
 
@@ -121,14 +137,37 @@ comentado para quando for plugar o Supabase de verdade.
 - Avisos de "diagnóstico estético e orientativo" aparecem no consentimento,
   no editor do relatório e no rodapé do PDF.
 
-## 6. Limitações conhecidas do MVP
+## 6. Configurando o Supabase
 
-- `.data/db.json` é um arquivo local — funciona bem para demo/dev, mas não
-  serve para múltiplas instâncias em produção (é exatamente o que o Supabase
-  resolve).
+1. Crie uma conta gratuita em **supabase.com** e um novo projeto (escolha uma
+   senha de banco de dados forte — guarde-a, mas ela não é usada por este
+   app diretamente).
+2. No painel do projeto, vá em **SQL Editor** → **New query**, cole todo o
+   conteúdo de `supabase/schema.sql` deste projeto e clique em **Run**. Isso
+   cria as 6 tabelas e já cadastra os pacotes de crédito.
+3. Vá em **Settings → API**. Copie:
+   - **Project URL** → variável `SUPABASE_URL`
+   - **service_role** (na seção "Project API keys" — é a chave secreta, não
+     a "anon/public") → variável `SUPABASE_SERVICE_ROLE_KEY`
+4. Configure essas duas variáveis no seu ambiente (no Render: Settings →
+   Environment → Add Environment Variable, uma para cada).
+
+A partir daí, os dados passam a ser permanentes — sobrevivem a redeploys,
+reinícios por inatividade, e a quantas atualizações de código você quiser
+fazer.
+
+## 7. Limitações conhecidas do MVP
+
+- Fotos ainda são guardadas como texto (base64) dentro da própria linha do
+  diagnóstico — funciona, mas migrar para Supabase Storage deixaria o banco
+  mais leve e as fotos mais fáceis de servir/otimizar.
 - `npm audit` aponta vulnerabilidades em transitivas do Next.js/jsPDF que só
   são corrigidas com upgrades de major version (Next 16, jsPDF 4). Não foram
   aplicadas aqui para não arriscar breaking changes num MVP recém-entregue —
   vale revisar antes de ir para produção.
 - PDF é gerado no navegador (jsPDF) e não fica salvo em storage — o campo
   `pdf_url` existe no schema para quando isso for persistido.
+- `adjustCredits` faz "ler saldo → calcular → gravar" em duas etapas (sem
+  transação atômica no Postgres). Para o volume de uso de um MVP isso é
+  seguro; numa escala maior, valeria mover para uma função SQL (`rpc`) que
+  incrementa o saldo atomicamente.

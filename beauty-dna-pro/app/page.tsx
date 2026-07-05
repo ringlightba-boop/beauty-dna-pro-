@@ -5,8 +5,13 @@ import { Footer } from "@/components/public/Footer";
 import { getPackages } from "@/lib/db";
 import { formatCurrency } from "@/lib/utils";
 
-export default function HomePage() {
-  const packages = getPackages();
+// This page fetches live pricing from Supabase, which isn't reachable
+// during the build step (e.g. on Render's build servers) — render it per
+// request instead of trying to statically prerender it at build time.
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const packages = await getPackages();
 
   return (
     <div>

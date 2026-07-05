@@ -3,13 +3,13 @@ import { getPackages } from "@/lib/db";
 import { CreditBadge } from "@/components/ui/CreditBadge";
 import { PacotesGrid } from "@/components/painel/PacotesGrid";
 
-export default function PacotesPage({
+export default async function PacotesPage({
   searchParams,
 }: {
   searchParams: { motivo?: string; status?: string };
 }) {
-  const profile = getCurrentProfile()!;
-  const packages = getPackages();
+  const profile = (await getCurrentProfile())!;
+  const packages = await getPackages();
   const isUnlimited = profile.plan_type === "unlimited";
 
   return (

@@ -16,6 +16,7 @@ interface CreatePreferenceInput {
   notificationUrl: string;
   externalReference: string;
   metadata: Record<string, string>;
+  statementDescriptor?: string;
 }
 
 interface MercadoPagoPreference {
@@ -50,6 +51,7 @@ export async function createPreference(
       notification_url: input.notificationUrl,
       external_reference: input.externalReference,
       metadata: input.metadata,
+      statement_descriptor: (input.statementDescriptor ?? "BEAUTYDNAPRO").slice(0, 13),
     }),
   });
 

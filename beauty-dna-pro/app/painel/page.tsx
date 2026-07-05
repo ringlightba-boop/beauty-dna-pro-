@@ -7,10 +7,10 @@ import { LinkShareCard } from "@/components/painel/LinkShareCard";
 import { getBaseUrl } from "@/lib/get-base-url";
 import { formatDateTime, statusLabel } from "@/lib/utils";
 
-export default function DashboardPage() {
-  const profile = getCurrentProfile()!;
-  const diagnostics = getDiagnosticsByProfessional(profile.id);
-  const clients = getClientsByProfessional(profile.id);
+export default async function DashboardPage() {
+  const profile = (await getCurrentProfile())!;
+  const diagnostics = await getDiagnosticsByProfessional(profile.id);
+  const clients = await getClientsByProfessional(profile.id);
   const concluidos = diagnostics.filter((d) => d.status === "concluido");
   const pendentes = diagnostics.filter((d) => d.status === "aguardando_cliente");
   const isUnlimited = profile.plan_type === "unlimited";

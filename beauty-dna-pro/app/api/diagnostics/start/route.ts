@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const profile = getProfileBySlug(slug);
+  const profile = await getProfileBySlug(slug);
   if (!profile) {
     return NextResponse.json(
       { error: "Link inválido. Verifique o link com sua profissional." },
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const clientRecord = createClient({
+  const clientRecord = await createClient({
     professional_id: profile.id,
     name: client.name,
     whatsapp: client.whatsapp,
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     instagram: client.instagram || undefined,
   });
 
-  const diagnostic = createDiagnostic({
+  const diagnostic = await createDiagnostic({
     professional_id: profile.id,
     client_id: clientRecord.id,
     status: "aguardando_cliente",

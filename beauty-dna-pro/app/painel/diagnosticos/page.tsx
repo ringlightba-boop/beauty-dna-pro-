@@ -3,10 +3,10 @@ import { getCurrentProfile } from "@/lib/auth";
 import { getClientsByProfessional, getDiagnosticsByProfessional } from "@/lib/db";
 import { formatDateTime, serviceLabel, statusLabel } from "@/lib/utils";
 
-export default function DiagnosticosPage() {
-  const profile = getCurrentProfile()!;
-  const diagnostics = getDiagnosticsByProfessional(profile.id);
-  const clients = getClientsByProfessional(profile.id);
+export default async function DiagnosticosPage() {
+  const profile = (await getCurrentProfile())!;
+  const diagnostics = await getDiagnosticsByProfessional(profile.id);
+  const clients = await getClientsByProfessional(profile.id);
 
   return (
     <div className="max-w-5xl">

@@ -12,7 +12,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const diagnostic = getDiagnosticById(params.id);
+  const diagnostic = await getDiagnosticById(params.id);
   if (!diagnostic) {
     return NextResponse.json(
       { error: "Diagnóstico não encontrado." },
@@ -20,7 +20,7 @@ export async function POST(
     );
   }
 
-  const profile = getProfileById(diagnostic.professional_id);
+  const profile = await getProfileById(diagnostic.professional_id);
   if (!profile) {
     return NextResponse.json(
       { error: "Profissional não encontrada." },
@@ -56,7 +56,7 @@ export async function POST(
   if (!isUnlimited && profile.credits_available <= 0) {
     // Preserve the answers so the professional can see this as a pending
     // client once she tops up credits, instead of losing the submission.
-    updateDiagnostic(diagnostic.id, {
+    await updateDiagnostic(diagnostic.id, {
       service_type: servico as ServiceType,
       occasion: ocasiao,
       desired_image: imagem_desejada,
@@ -94,7 +94,7 @@ export async function POST(
 
   const result = generateDiagnosticResult(answers);
 
-  const updated = updateDiagnostic(diagnostic.id, {
+  const updated = await updateDiagnostic(diagnostic.id, {
     status: "concluido",
     service_type: servico as ServiceType,
     occasion: ocasiao,
@@ -110,7 +110,7 @@ export async function POST(
     whatsapp_summary: result.look_dna.resumo_whatsapp,
   });
 
-  adjustCredits(
+  await adjustCredits(
     profile.id,
     -1,
     "consume",

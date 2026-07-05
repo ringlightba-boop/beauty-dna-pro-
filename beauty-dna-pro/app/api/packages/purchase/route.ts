@@ -10,13 +10,13 @@ import { createPreference, isMercadoPagoConfigured } from "@/lib/mercadopago";
 import { getBaseUrl } from "@/lib/get-base-url";
 
 export async function POST(req: NextRequest) {
-  const profile = getCurrentProfile();
+  const profile = await getCurrentProfile();
   if (!profile) {
     return NextResponse.json({ error: "Não autenticada." }, { status: 401 });
   }
 
   const { packageId } = await req.json();
-  const pkg = getPackageById(packageId);
+  const pkg = await getPackageById(packageId);
   if (!pkg) {
     return NextResponse.json({ error: "Pacote inválido." }, { status: 404 });
   }
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   // Order starts pending either way. In mock mode it's approved immediately
   // below; in real mode, it stays pending until the Mercado Pago webhook
   // confirms the payment.
-  const order = createPaymentOrder({
+  const order = await createPaymentOrder({
     professional_id: profile.id,
     package_id: pkg.id,
     provider: isMercadoPagoConfigured() ? "mercado_pago" : "mock",
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
   if (!isMercadoPagoConfigured()) {
     // MVP mock fallback: no MERCADOPAGO_ACCESS_TOKEN set, so simulate an
     // instantly-approved payment. This keeps local/dev testing frictionless.
-    updatePaymentOrder(order.id, { status: "approved" });
-    grantPackageCredits(profile.id, pkg);
+    await updatePaymentOrder(order.id, { status: "approved" });
+    await grantPackageCredits(profile.id, pkg);
     return NextResponse.json({ ok: true, package: pkg.name });
   }
 
@@ -62,11 +62,11 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    updatePaymentOrder(order.id, { checkout_url: preference.init_point });
+    await updatePaymentOrder(order.id, { checkout_url: preference.init_point });
 
     return NextResponse.json({ ok: true, checkoutUrl: preference.init_point });
   } catch (err) {
-    updatePaymentOrder(order.id, { status: "rejected" });
+    await updatePaymentOrder(order.id, { status: "rejected" });
     console.error("Mercado Pago createPreference failed:", err);
     return NextResponse.json(
       { error: "Não foi possível iniciar o pagamento. Tente novamente em instantes." },

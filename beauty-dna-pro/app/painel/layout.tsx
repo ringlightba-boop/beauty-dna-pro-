@@ -3,12 +3,12 @@ import { getCurrentProfile } from "@/lib/auth";
 import { Sidebar } from "@/components/painel/Sidebar";
 import { MobileTabBar } from "@/components/painel/MobileTabBar";
 
-export default function PainelLayout({
+export default async function PainelLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const profile = getCurrentProfile();
+  const profile = await getCurrentProfile();
   if (!profile) {
     redirect("/login");
   }

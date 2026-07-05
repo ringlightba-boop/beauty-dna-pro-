@@ -57,9 +57,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (orderId) {
-    const order = getPaymentOrderById(orderId);
+    const order = await getPaymentOrderById(orderId);
     if (order) {
-      updatePaymentOrder(orderId, {
+      await updatePaymentOrder(orderId, {
         status: payment.status === "approved" ? "approved" : payment.status === "rejected" ? "rejected" : "pending",
       });
     }
@@ -72,19 +72,19 @@ export async function POST(req: NextRequest) {
   }
 
   const reference = `MP #${payment.id}`;
-  if (wasPaymentAlreadyProcessed(professionalId, reference)) {
+  if (await wasPaymentAlreadyProcessed(professionalId, reference)) {
     // Duplicate notification for a payment we already credited — Mercado
     // Pago retries notifications, so this must be a safe no-op.
     return NextResponse.json({ ok: true, already_processed: true });
   }
 
-  const pkg = getPackageById(packageId);
+  const pkg = await getPackageById(packageId);
   if (!pkg) {
     console.error("Mercado Pago webhook: unknown package_id in metadata", packageId);
     return NextResponse.json({ ok: true, ignored: true });
   }
 
-  grantPackageCredits(professionalId, pkg, reference);
+  await grantPackageCredits(professionalId, pkg, reference);
 
   return NextResponse.json({ ok: true });
 }

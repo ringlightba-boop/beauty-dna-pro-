@@ -2,12 +2,12 @@ import { notFound } from "next/navigation";
 import { getProfileBySlug } from "@/lib/db";
 import { ClienteWizard } from "@/components/cliente/ClienteWizard";
 
-export default function ClienteDiagnosticoPage({
+export default async function ClienteDiagnosticoPage({
   params,
 }: {
   params: { slug: string };
 }) {
-  const profile = getProfileBySlug(params.slug);
+  const profile = await getProfileBySlug(params.slug);
   if (!profile) {
     notFound();
   }
